@@ -11,8 +11,10 @@ class data_reader():
 		print('Reading data...')
 		#img1 = []
 		data = []
+		label = []
 		df = pd.read_csv('labels.csv')
-
+		df1 = pd.read_csv('breeds.csv')
+		label = df1['id'].as_matrix()
 		#label=LabelEncoder().fit_transform(df['breed'])
 		#print(label)
 		for index, row in df.iterrows():
@@ -24,7 +26,7 @@ class data_reader():
 			#cv2.imshow('image',img)
 			#cv2.waitKey(0)
 			#label=LabelEncoder().fit_transform(df['breed'])
-			data_row = [img]
+			data_row = [img, label]
 			data.append(data_row)
 
 		self.data = data
@@ -35,18 +37,22 @@ class data_reader():
 
 
 def main_structure(inp):
-    with tf.variable_scope('mainModel'):
-        inp = tf.scan(lambda _,y:tf.image.random_brightness(y,20),inp,initializer=tf.constant(0.0,shape=[256,256,3]))
-        inp = tf.scan(lambda _,y:tf.image.random_contrast(y,0.5,2),inp,initializer=tf.constant(0.0,shape=[256,256,3]))
-        inp = tf.scan(lambda _,y:tf.image.random_saturation(y,0.5,2),inp,initializer=tf.constant(0.0,shape=[256,256,3]))
-        mod = M.Model(inp,[None,256,256,3])
-        mod.convLayer(5,16,stride=2,activation=M.PARAM_LRELU)#128_2x2
-        mod.convLayer(3,32,stride=2,activation=M.PARAM_LRELU)#64_4x4
-        mod.convLayer(3,64,stride=2,activation=M.PARAM_LRELU)#32_8x8
-        mod.flatten()
-        mod.fcLayer(1000,activation=M.PARAM_RELU)
-        mod.fcLayer(120)
-        return mod.get_current_layer()
+	with tf.variable_scope('mainModel'):
+		inp = tf.scan(lambda _,y:tf.image.random_brightness(y,20),inp,initializer=tf.constant(0.0,shape=[256,256,3]))
+		inp = tf.scan(lambda _,y:tf.image.random_contrast(y,0.5,2),inp,initializer=tf.constant(0.0,shape=[256,256,3]))
+		inp = tf.scan(lambda _,y:tf.image.random_saturation(y,0.5,2),inp,initializer=tf.constant(0.0,shape=[256,256,3]))
+		mod = M.Model(inp,[None,256,256,3])
+		mod.convLayer(5,16,stride=2,activation=M.PARAM_LRELU)#128_2x2
+		mod.maxpoolLayer(2) #64
+		mod.convLayer(3,32,stride=2,activation=M.PARAM_LRELU)#32_4x4
+		mod.maxpoolLayer(2) # 16
+		mod.convLayer(2,64,stride=2,activation=M.PARAM_LRELU)#8_8x8
+		mod.convLayer(2,128,activation=M.PARAM_LRELU)#8_8x8
+		mod.convLayer(1,256,activation=M.PARAM_LRELU)#8_8x8
+		mod.flatten()
+		mod.fcLayer(1000,activation=M.PARAM_RELU)
+		mod.fcLayer(120)
+		return mod.get_current_layer()
 
 
 def build_graph():
@@ -64,16 +70,10 @@ def build_graph():
 	return img_holder,lab_holder,loss,train_step,accuracy,last_layer
 
 MAXITER = 100000000
-BSIZE = 16
+BSIZE = 32
 
 reader = data_reader()
 img_holder,lab_holder,loss,train_step,accuracy,last_layer = build_graph()
-label =[None,None]
-df1 = pd.read_csv('breeds.csv')
-for index, row in df1.iterrows():
-	label_row = row['id']
-	label.append(label_row
-lab_batch = np.reshape[None,label]
 
 with tf.Session() as sess:
 	M.loadSess('./model/',sess,init=True)
@@ -86,6 +86,7 @@ with tf.Session() as sess:
 		# print(iteration)
 		img_batch = [i[0] for i in train_batch]
 		img_batch = np.float32(img_batch)
+		lab_batch = [i[1] for i in train_batch]
 		feeddict = {img_holder:img_batch, lab_holder:lab_batch}
 		# print(iteration)
 		_,acc,ls = sess.run([train_step,accuracy,loss],feed_dict=feeddict)
