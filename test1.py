@@ -11,13 +11,13 @@ class data_reader():
 		print('Reading data...')
 		#img1 = []
 		data = []
-		label = []
+		label1 = []
 		code = []
 		df = pd.read_csv('labels.csv')
 		df1 = pd.read_csv('breeds.csv')
-		label = df1['id'].as_matrix()
+		#code = df1['id'].as_matrix()
 		code=LabelEncoder().fit_transform(df['breed'])
-		#print(label)
+		#print(code)
 		i=0
 		for index, row in df.iterrows():
 			image_path = 'train/'+row['id']+'.jpg'
@@ -27,12 +27,11 @@ class data_reader():
 			#print(img)
 			#cv2.imshow('image',img)
 			#cv2.waitKey(0)
-			#label=LabelEncoder().fit_transform(df['breed'])
-			label= code[i]
-			i= i++1
-			data_row = [img, label]
+			#label=LabelEncoder().fit_transform(row['breed'])
+			label1= code[i]
+			i= i+1
+			data_row = [img, label1]
 			data.append(data_row)
-
 		self.data = data
 
 	def next_train_batch(self,bsize):
@@ -64,41 +63,42 @@ def build_graph():
 		img_holder = tf.placeholder(tf.float32,[None,256,256,3])
 	with tf.name_scope('lab_holder'):
 		lab_holder = tf.placeholder(tf.int32,[None])
+	label = tf.one_hot(lab_holder,120)
 
 	last_layer = main_structure(img_holder)
 
-	loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=lab_holder,logits=last_layer))
-	accuracy = M.accuracy(last_layer,tf.argmax(lab_holder,1))
-	train_step = tf.train.AdamOptimizer(0.01).minimize(loss)
+	#bias_loss = tf.reduce_sum(tf.reduce_mean(tf.square(last_layer - img_holder),axis=0))
+	conf_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=label,logits=last_layer))
+	accuracy = M.accuracy(last_layer,lab_holder)
+	train_step = tf.train.AdamOptimizer(0.01).minimize(conf_loss)
 
-	return img_holder,lab_holder,loss,train_step,accuracy,last_layer
+	return img_holder,lab_holder,conf_loss,train_step,last_layer,accuracy
 
 MAXITER = 100000000
 BSIZE = 32
 
 reader = data_reader()
-img_holder,lab_holder,loss,train_step,accuracy,last_layer = build_graph()
+img_holder,lab_holder,conf_loss,train_step,last_layer,accuracy = build_graph()
 
 with tf.Session() as sess:
 	M.loadSess('./model/',sess,init=True)
-	saver = tf.train.Saver()
+	saver = tf.train.Saver()	
 	reader = data_reader()
 	print('Reading finish')
 	for iteration in range(MAXITER):
 		# print(iteration)
 		train_batch = reader.next_train_batch(BSIZE)
 		# print(iteration)
-		img_batch = [i[0] for i in train_batch]
-		img_batch = np.float32(img_batch)
+		img_batch = [i[0] for i in train_batch]	
 		lab_batch = [i[1] for i in train_batch]
 		feeddict = {img_holder:img_batch, lab_holder:lab_batch}
 		# print(iteration)
-		_,acc,ls = sess.run([train_step,accuracy,loss],feed_dict=feeddict)
+		_,acc,loss = sess.run([train_step,accuracy,conf_loss],feed_dict=feeddict)
 
 		if iteration%10==0:
-			print('Iter:',iteration,'\tLoss_b:',ls,'\tAcc:',acc)
+			print('Iter:',iteration,'\tLoss_c:',loss,'\tAcc:',acc)
 			# print(c.max())
-			img = img_batch[0].astype(np.uint8)
+			#img = img_batch[0].astype(np.uint8)
 
 		if iteration%5000==0 and iteration!=0:
 			saver.save(sess,'./model/'+str(iteration)+'.ckpt')
